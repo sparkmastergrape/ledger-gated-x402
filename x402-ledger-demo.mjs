@@ -50,9 +50,11 @@ async function until(what, fn, ms = 120_000) {
   while (Date.now() < end) { try { const v = await fn(); if (v) return v; } catch { /* not up yet */ } await sleep(1000); }
   throw new Error(`timed out waiting for ${what}`);
 }
-const gateGet = async (path) => (await fetch(GATE + path)).json();
+// The software approver plays the approver role, so it sends GATE_APPROVER_TOKEN when the gate asks for one.
+const authHeaders = () => (process.env.GATE_APPROVER_TOKEN ? { authorization: `Bearer ${process.env.GATE_APPROVER_TOKEN}` } : {});
+const gateGet = async (path) => (await fetch(GATE + path, { headers: authHeaders() })).json();
 const gatePost = async (path, body = {}) => {
-  const r = await fetch(GATE + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const r = await fetch(GATE + path, { method: 'POST', headers: { 'content-type': 'application/json', ...authHeaders() }, body: JSON.stringify(body) });
   return { status: r.status, body: await r.json().catch(() => ({})) };
 };
 

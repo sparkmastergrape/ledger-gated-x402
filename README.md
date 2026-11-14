@@ -75,12 +75,22 @@ Each claim carries a label. `measured` means someone watched it happen. `inferre
 from the code or the docs but nobody watched it. `not run` means no check was made.
 
 - **measured** (2026-11-14, this repository): `npm test` passes. 15 tests in the verifier and the
-  merchant, and 27 in the gate and policy. `tsc --noEmit` is clean on the approver app.
+  merchant, and 99 in the approver package (27 gate and policy, 59 guard unit tests, 13 HTTP tests of the guard in the
+  running gate). `tsc --noEmit` is clean on the approver app.
+- **measured** (2026-11-14): the 13 HTTP guard tests fail when the origin check or the approver-token check is
+  removed from the gate, and pass with them in place.
+- **measured** (2026-11-14): `npm run demo:software` with both `GATE_AGENT_TOKEN` and `GATE_APPROVER_TOKEN` set gave the
+  expected outcome in all four beats. Neither token appeared in the output.
+- **measured** (2026-11-14): in a browser, with the approver token required, the approver app asked for the token.
+  A wrong token showed "The gate did not accept this token." The right token was accepted and stayed in
+  `sessionStorage` only. The app did not use `localStorage`.
 - **measured** (2026-11-14, this repository): `npm run demo:software` ran twice against XRPL testnet.
   All four beats gave the expected outcome both times. The second run also showed the merchant refusing a
   replayed payment with `invoice_already_used`. A software key played the approver.
-- **measured** (2026-11-14, this repository): `npm run demo` with the approver app connected to the
-  **Speculos Stax emulator** (XRP app 2.8.2) gave the expected outcome in all four beats. No physical device took part.
+- **measured** (2026-11-14, this repository, **before the network guard was added**): `npm run demo` with the approver
+  app connected to the **Speculos Stax emulator** (XRP app 2.8.2) gave the expected outcome in all four beats. No
+  physical device took part. **This run was not repeated after the guard.** The guard changes the gate's HTTP layer
+  and the app's API calls, not the signing code.
   - Beat 2: Reject on the emulator made DMK fail with status word `0x6985`. The gate recorded `declined on device
     (0x6985)`. The script printed DECLINED. The intent had no tx hash. `account_tx` on the three accounts found no
     transaction that carries the invoice.
@@ -100,8 +110,10 @@ from the code or the docs but nobody watched it. `not run` means no check was ma
 
 ## Limits
 
-- **The gate has no authentication.** It binds to `127.0.0.1` and allows CORS only from
-  `localhost:5173` and `127.0.0.1:5173`. Anything on the same machine can call it. State is in memory and a restart loses it.
+- **The gate has no login.** It binds to `127.0.0.1` and has a [network guard](#network-guard). Bearer tokens
+  are optional and off by default. With no token set, any process on the same machine that sends no `Origin`
+  header can call the gate. A token is a shared secret in an environment variable, not a user account.
+  State is in memory and a restart loses it.
 - **`risk` and `health` are stated by the caller.** Nothing here screens a destination or reads
   ledger health. Beat 4 shows the gate's rule. It does not show a sanctions check.
 - **The caps are placeholders** (50 XRP per payment, 200 XRP per rolling day). The policy is in
@@ -115,6 +127,29 @@ from the code or the docs but nobody watched it. `not run` means no check was ma
   verifier matches the memo data, which holds the invoice id.
 - The one-use rule for invoices lives in the merchant's memory. It does not survive a restart.
 
+## Network guard
+
+The gate checks every HTTP request before it routes the request or reads the body (`ledger-approver/server/guard.mjs`).
+
+- **Host:** only `127.0.0.1`, `localhost` or `[::1]` on the gate's own port. This blocks DNS rebinding. Other hosts get 421.
+- **Target:** the request target must be a path. An absolute URL gets 421. `//x` and a backslash get 400.
+- **Origin:** a request that carries an `Origin` header must carry an allowed one, or it gets 403. The default list is
+  the approver app on port 5173. Set `GATE_ALLOWED_ORIGINS` to a comma list of exact origins to change it.
+  A request with no `Origin` (curl, the agent) passes this check.
+- **Content type:** every request except GET and HEAD must be `application/json`, or it gets 415.
+- **Preflight:** `OPTIONS` answers only for an allowed origin, and only for GET and POST.
+- **Tokens (optional):** set `GATE_AGENT_TOKEN` to guard `POST /intents`. Set `GATE_APPROVER_TOKEN` to guard the list,
+  approve, signature and reject. Each must be at least 16 printable characters, and the two must differ. The gate reads
+  them once at start, removes them from its environment, and never sends them over HTTP. `/health` shows only
+  booleans. The agent and the demo send the tokens if they are in their environment. The approver app asks for the
+  approver token when `/health` says one is set.
+
+```bash
+GATE_AGENT_TOKEN=<16+ characters> GATE_APPROVER_TOKEN=<a different 16+ characters> npm run demo:software
+```
+
+This guard comes from an earlier branch of this work. Only the guard was brought over, with the wiring and tests.
+
 ## Layout
 
 | Path | What it is |
@@ -122,6 +157,7 @@ from the code or the docs but nobody watched it. `not run` means no check was ma
 | `ledger-approver/server/policy.mjs` | The rules: auto, approval or block. Default deny. |
 | `ledger-approver/server/gate.mjs` | The intent queue and state machine. Builds the transaction when a person approves. |
 | `ledger-approver/server/gate-server.mjs` | HTTP on `127.0.0.1:8787`. |
+| `ledger-approver/server/guard.mjs` | The request guard: Host, Origin, content type, preflight, optional tokens. |
 | `ledger-approver/src/` | The React approver app. Signs through the Ledger Device Management Kit and the XRP signer kit. |
 | `xrpl-merchant.cjs` | The demo x402 merchant. |
 | `xrpl-payment-verify.cjs` | Pure checks of a ledger transaction against a quote. |

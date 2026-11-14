@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { api, type Intent } from './api';
+import { api, GateAuthError, tokenStore, type Intent } from './api';
 import { connect, DeviceDeclined, disconnect, signTransaction, verifyAddressOnDevice, type Session, type TransportKind } from './ledger';
 import { describeTx } from './preview';
 
@@ -26,18 +26,27 @@ export function App() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
-  const [gate, setGate] = useState<{ ok: boolean; approver: string | null; demoError: string | null } | null>(null);
+  const [gate, setGate] = useState<{ ok: boolean; approver: string | null; demoError: string | null; approverToken: boolean } | null>(null);
+  // The approver token field: only shown when the gate says it needs one. The token itself is kept in api.ts (sessionStorage).
+  const [tokenInput, setTokenInput] = useState('');
+  const [hasToken, setHasToken] = useState(() => tokenStore.get() !== '');
+  const [tokenRefused, setTokenRefused] = useState(false);
   const [policy, setPolicy] = useState<{ perTxCapXrp: number; dailyCapXrp: number } | null>(null);
 
   const refresh = useCallback(async () => {
+    // /health is open, so the app can always tell whether to ask for a token. A 401 on the list is "needs a token", not "gate down".
+    let h;
+    try { h = await api.health(); } catch { setGate(null); return; }
+    setGate({ ok: h.ok, approver: h.approver, demoError: h.demo.error, approverToken: h.approverToken === true });
     try {
       setIntents(await api.list());
-      const h = await api.health();
-      setGate({ ok: h.ok, approver: h.approver, demoError: h.demo.error });
+      setTokenRefused(false);
     } catch (e) {
-      setGate(null);
+      if (e instanceof GateAuthError) { setIntents([]); setTokenRefused(true); } else setGate(null);
     }
   }, []);
+  const saveToken = () => { tokenStore.set(tokenInput.trim()); setTokenInput(''); setHasToken(tokenStore.get() !== ''); setTokenRefused(false); refresh(); };
+  const forgetToken = () => { tokenStore.set(''); setTokenInput(''); setHasToken(false); setTokenRefused(false); refresh(); };
   useEffect(() => { refresh(); const t = setInterval(refresh, 2500); return () => clearInterval(t); }, [refresh]);
   useEffect(() => { api.policy().then(setPolicy).catch(() => {}); }, []);
 
@@ -99,6 +108,27 @@ export function App() {
       {error && <div className="banner bad" role="alert">{error}</div>}
       {notice && <div className="banner info" role="status">{notice}</div>}
       {status && <div className="banner info" role="status">{status}</div>}
+
+      {gate?.approverToken && (
+        <section className="panel" aria-label="Approver token">
+          <h2>Approver token</h2>
+          <div className="row">
+            <label>Token{' '}
+              <input type="password" autoComplete="off" spellCheck={false} value={tokenInput} placeholder={hasToken ? 'saved for this tab' : 'paste the approver token'}
+                onChange={(e) => setTokenInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && tokenInput.trim()) saveToken(); }} />
+            </label>
+            <div className="actions">
+              <button className="primary" onClick={saveToken} disabled={!tokenInput.trim()}>Use token</button>
+              <button onClick={forgetToken} disabled={!hasToken}>Forget</button>
+            </div>
+          </div>
+          <div className={tokenRefused ? 'bad-text' : 'muted'} role={tokenRefused ? 'alert' : undefined}>
+            {tokenRefused
+              ? (hasToken ? 'The gate did not accept this token.' : 'The gate needs its approver token to list and decide requests.')
+              : 'Sent to the gate as a Bearer header. Kept in this tab only (sessionStorage); closing the tab forgets it.'}
+          </div>
+        </section>
+      )}
 
       <section className="panel">
         <h2>Device</h2>

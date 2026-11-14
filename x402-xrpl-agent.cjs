@@ -29,7 +29,9 @@ const unb64 = (text) => JSON.parse(Buffer.from(text, 'base64').toString('utf8'))
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function gate(path, init) {
-  const res = await fetch(GATE_URL + path, { ...init, headers: { 'content-type': 'application/json' } });
+  const headers = { 'content-type': 'application/json' };
+  if (process.env.GATE_AGENT_TOKEN) headers.authorization = `Bearer ${process.env.GATE_AGENT_TOKEN}`; // only when the gate asks for one
+  const res = await fetch(GATE_URL + path, { ...init, headers });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`gate ${path}: ${body.message ?? res.status}`);
   return body;

@@ -13,7 +13,7 @@ h1 { margin: 0; font-size: 22px; } h2 { margin: 0 0 8px; font-size: 17px; } h3 {
 button { font: inherit; padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--fg); cursor: pointer; }
 button:disabled { opacity: .5; cursor: not-allowed; }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-select { font: inherit; padding: 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); }
+select, input { font: inherit; padding: 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); }
 ul { list-style: none; padding: 0; margin: 8px 0 0; }
 .card { width: 100%; text-align: left; margin-bottom: 8px; padding: 10px; }
 .card.on { border-color: var(--accent); outline: 1px solid var(--accent); }
