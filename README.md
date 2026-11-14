@@ -79,12 +79,18 @@ from the code or the docs but nobody watched it. `not run` means no check was ma
 - **measured** (2026-11-14, this repository): `npm run demo:software` ran twice against XRPL testnet.
   All four beats gave the expected outcome both times. The second run also showed the merchant refusing a
   replayed payment with `invoice_already_used`. A software key played the approver.
-- **measured** (earlier, in the repository this was extracted from): the device path on the
-  **Speculos Stax emulator** with the XRP app 2.8.2. All four beats gave the expected outcome. A reject on the
-  emulator made DMK fail with `0x6985`. The approver app recorded a rejection. The device session survived into
-  beat 3, which signed and gave `tesSUCCESS`. **That run used an earlier merchant and was not repeated after
-  the extraction.** The approver app and gate are the same files. The merchant is a rewrite.
-- **measured** (same earlier run): on a Speculos **Nano X** build, signing fails 0.3 to 1.0 seconds after the
+- **measured** (2026-11-14, this repository): `npm run demo` with the approver app connected to the
+  **Speculos Stax emulator** (XRP app 2.8.2) gave the expected outcome in all four beats. No physical device took part.
+  - Beat 2: Reject on the emulator made DMK fail with status word `0x6985`. The gate recorded `declined on device
+    (0x6985)`. The script printed DECLINED. The intent had no tx hash. `account_tx` on the three accounts found no
+    transaction that carries the invoice.
+  - Beat 3, right after beat 2, with no reconnect: the device session survived. The emulator showed the invoice id as
+    `Memo Data [1]`. The payment reached `tesSUCCESS`, and the merchant released the resource. The same payment shown
+    again was refused with `invoice_already_used`.
+  - Beat 4: `BLOCKED`. Approve returned HTTP 409.
+  - The taps, swipes and the hold-to-sign were sent to the emulator through Speculos's HTTP API by a script, in place
+    of a finger. The app clicks were made in a browser.
+- **measured** (earlier run, in the repository this was extracted from): on a Speculos **Nano X** build, signing fails 0.3 to 1.0 seconds after the
   request with status `6901`, with no button pressed, while the device keeps showing the review. The cause is **not
   known**. The code does not treat `6901` as a decline. Not reported to Ledger.
 - **not run:** a physical Ledger device. A Flex. A mainnet anything.
